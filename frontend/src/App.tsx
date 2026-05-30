@@ -84,6 +84,7 @@ function App() {
           filters={filters}
           onChange={handleFilterChange}
           onClear={handleClearFilters}
+          availableCars={displayedCars}
         />
 
         <main className="main-content">

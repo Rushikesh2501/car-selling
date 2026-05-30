@@ -1,21 +1,23 @@
 import React from 'react';
-import type { FilterState } from '../types';
+import type { FilterState, Car } from '../types';
 
 interface FilterSidebarProps {
   filters: FilterState;
   onChange: (updates: Partial<FilterState>) => void;
   onClear: () => void;
+  availableCars: Car[];
 }
 
-const BRANDS = ['Toyota', 'Honda', 'BMW', 'Tesla', 'Suzuki', 'Hyundai', 'Ford', 'Mercedes-Benz'];
-const BODY_TYPES = ['sedan', 'hatchback', 'mpv'];
-const CONDITIONS = ['Excellent', 'Very Good', 'Good', 'Fair', 'Poor'];
-const COLORS = ['White', 'Black', 'Silver', 'Red', 'Blue', 'Grey', 'Bronze'];
+const MASTER_BRANDS = ['Toyota', 'Honda', 'BMW', 'Tesla', 'Suzuki', 'Hyundai', 'Ford', 'Mercedes-Benz'];
+const MASTER_BODY_TYPES = ['sedan', 'hatchback', 'mpv'];
+const MASTER_CONDITIONS = ['Excellent', 'Very Good', 'Good', 'Fair', 'Poor'];
+const MASTER_COLORS = ['White', 'Black', 'Silver', 'Red', 'Blue', 'Grey', 'Bronze'];
 
 export const FilterSidebar: React.FC<FilterSidebarProps> = ({
   filters,
   onChange,
   onClear,
+  availableCars,
 }) => {
   const handleSelectChange = (
     e: React.ChangeEvent<HTMLSelectElement | HTMLInputElement>
@@ -23,6 +25,49 @@ export const FilterSidebar: React.FC<FilterSidebarProps> = ({
     const { name, value } = e.target;
     onChange({ [name]: value });
   };
+
+  // Dynamically extract active options from availableCars to avoid showing extra options!
+  const availableBrands = React.useMemo(() => {
+    const brands = new Set<string>();
+    availableCars.forEach((c) => {
+      if (c.brand) brands.add(c.brand);
+    });
+    if (filters.brand) brands.add(filters.brand); // keep selected value visible
+    return Array.from(brands).sort();
+  }, [availableCars, filters.brand]);
+
+  const availableBodyTypes = React.useMemo(() => {
+    const types = new Set<string>();
+    availableCars.forEach((c) => {
+      if (c.body_type) types.add(c.body_type.toLowerCase());
+    });
+    if (filters.bodyType) types.add(filters.bodyType.toLowerCase());
+    return Array.from(types).sort();
+  }, [availableCars, filters.bodyType]);
+
+  const availableConditions = React.useMemo(() => {
+    const conditions = new Set<string>();
+    availableCars.forEach((c) => {
+      if (c.condition) conditions.add(c.condition);
+    });
+    if (filters.condition) conditions.add(filters.condition);
+    return Array.from(conditions).sort();
+  }, [availableCars, filters.condition]);
+
+  const availableColors = React.useMemo(() => {
+    const colors = new Set<string>();
+    availableCars.forEach((c) => {
+      if (c.color) colors.add(c.color);
+    });
+    if (filters.color) colors.add(filters.color);
+    return Array.from(colors).sort();
+  }, [availableCars, filters.color]);
+
+  // Fallback to master lists if availableCars is empty (e.g. before initial fetch or connection error)
+  const displayedBrands = availableCars.length > 0 ? availableBrands : MASTER_BRANDS;
+  const displayedBodyTypes = availableCars.length > 0 ? availableBodyTypes : MASTER_BODY_TYPES;
+  const displayedConditions = availableCars.length > 0 ? availableConditions : MASTER_CONDITIONS;
+  const displayedColors = availableCars.length > 0 ? availableColors : MASTER_COLORS;
 
   return (
     <aside className="sidebar glass-panel">
@@ -69,7 +114,7 @@ export const FilterSidebar: React.FC<FilterSidebarProps> = ({
           style={{ marginBottom: '12px' }}
         >
           <option value="">All Body Types</option>
-          {BODY_TYPES.map((bt) => (
+          {displayedBodyTypes.map((bt) => (
             <option key={bt} value={bt} style={{ textTransform: 'capitalize' }}>
               {bt}
             </option>
@@ -88,7 +133,7 @@ export const FilterSidebar: React.FC<FilterSidebarProps> = ({
           style={{ marginBottom: '12px' }}
         >
           <option value="">All Companies</option>
-          {BRANDS.map((b) => (
+          {displayedBrands.map((b) => (
             <option key={b} value={b}>
               {b}
             </option>
@@ -106,7 +151,7 @@ export const FilterSidebar: React.FC<FilterSidebarProps> = ({
           onChange={handleSelectChange}
         >
           <option value="">All Colors</option>
-          {COLORS.map((c) => (
+          {displayedColors.map((c) => (
             <option key={c} value={c}>
               {c}
             </option>
@@ -127,7 +172,7 @@ export const FilterSidebar: React.FC<FilterSidebarProps> = ({
           onChange={handleSelectChange}
         >
           <option value="">Any Condition</option>
-          {CONDITIONS.map((c) => (
+          {displayedConditions.map((c) => (
             <option key={c} value={c}>
               {c}
             </option>
