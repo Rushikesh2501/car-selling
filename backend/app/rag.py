@@ -3,8 +3,6 @@ import logging
 import re
 from typing import List, Dict, Any, Tuple
 import google.generativeai as genai
-import chromadb
-from chromadb.api.types import EmbeddingFunction, Documents, Embeddings
 
 from app.config import settings
 from app.database import get_all_cars
@@ -12,21 +10,6 @@ from app.models import Car, ChatMessage, ChatResponse
 
 logger = logging.getLogger("rag")
 logging.basicConfig(level=logging.INFO)
-
-# Define custom Gemini Embedding Function for ChromaDB
-class GeminiEmbeddingFunction(EmbeddingFunction):
-    def __init__(self, api_key: str):
-        self.api_key = api_key
-        genai.configure(api_key=api_key)
-
-    def __call__(self, input: Documents) -> Embeddings:
-        # Generate embeddings using the standard and widely supported embedding-001 model
-        response = genai.embed_content(
-            model="models/embedding-001",
-            content=input,
-            task_type="retrieval_document"
-        )
-        return response['embedding']
 
 # Fallback basic text search in case ChromaDB or Gemini is not fully configured
 def keyword_search(query: str, cars: List[Car]) -> List[int]:
@@ -121,103 +104,16 @@ def keyword_search(query: str, cars: List[Car]) -> List[int]:
 class RageEngine:
     def __init__(self):
         self.cars = get_all_cars()
-        self.initialized = False
-        self.chroma_client = None
-        self.collection = None
         self.api_key = settings.GEMINI_API_KEY
-        
-        if not self.api_key:
+        self.initialized = bool(self.api_key)
+        if self.initialized:
+            logger.info("RAG Engine initialized successfully with Gemini.")
+        else:
             logger.warning("GEMINI_API_KEY is not set in environment! RAG will run in simulation/fallback mode.")
-            return
-            
-        try:
-            # Initialize ChromaDB client (using persistent directory)
-            self.chroma_client = chromadb.PersistentClient(path=settings.CHROMA_PERSIST_DIR)
-            self.emb_fn = GeminiEmbeddingFunction(api_key=self.api_key)
-            
-            # Get or create collection
-            # To ensure clean database on server restart, we delete and recreate or just reset the collection
-            try:
-                self.chroma_client.delete_collection("cars_collection")
-            except Exception:
-                pass # Collection did not exist
-                
-            # Test the embedding function to ensure it works, otherwise trigger fallback immediately
-            self.emb_fn(["test"])
-            
-            self.collection = self.chroma_client.create_collection(
-                name="cars_collection",
-                embedding_function=self.emb_fn
-            )
-            
-            # Load cars into Chroma
-            self._load_cars_into_vector_db()
-            self.initialized = True
-            logger.info("ChromaDB and RAG Engine initialized successfully.")
-        except Exception as e:
-            logger.error(f"Failed to initialize ChromaDB/Gemini: {e}. Fallback mode active.")
-            self.initialized = False
-
-    def _load_cars_into_vector_db(self):
-        documents = []
-        ids = []
-        metadatas = []
-        
-        for car in self.cars:
-            # Build semantic description document
-            doc_text = (
-                f"ID: {car.id}. Brand: {car.brand}. Model: {car.model}. Year: {car.year}. Color: {car.color}. "
-                f"Price: ₹{car.price:.2f}. Condition: {car.condition}. Engine Capacity: {car.engine_capacity}L. "
-                f"Body Type: {car.body_type}. Fuel Type: {car.fuel_type}. Rating: {car.rating} stars. "
-                f"Mileage: {car.mileage} kilometers. Description: {car.description}"
-            )
-            documents.append(doc_text)
-            ids.append(str(car.id))
-            metadatas.append({
-                "id": car.id,
-                "brand": car.brand,
-                "model": car.model,
-                "price": car.price,
-                "body_type": car.body_type,
-                "condition": car.condition,
-                "year": car.year,
-                "color": car.color
-            })
-            
-        self.collection.add(
-            documents=documents,
-            ids=ids,
-            metadatas=metadatas
-        )
-        logger.info(f"Loaded {len(documents)} cars into ChromaDB.")
 
     def search_semantic_cars(self, query: str, limit: int = 5) -> List[Car]:
-        if not self.initialized or not self.collection:
-            logger.info("RAG not initialized. Performing keyword fallback search.")
-            matched_ids = keyword_search(query, self.cars)
-            return [car for car in self.cars if car.id in matched_ids][:limit]
-            
-        try:
-            results = self.collection.query(
-                query_texts=[query],
-                n_results=limit
-            )
-            
-            matched_ids = []
-            if results and 'ids' in results and len(results['ids']) > 0:
-                matched_ids = [int(x) for x in results['ids'][0]]
-                
-            # Fetch full car details maintaining Chroma relevance order
-            matched_cars = []
-            car_dict = {car.id: car for car in self.cars}
-            for cid in matched_ids:
-                if cid in car_dict:
-                    matched_cars.append(car_dict[cid])
-            return matched_cars
-        except Exception as e:
-            logger.error(f"Semantic search failed: {e}. Falling back to keywords.")
-            matched_ids = keyword_search(query, self.cars)
-            return [car for car in self.cars if car.id in matched_ids][:limit]
+        matched_ids = keyword_search(query, self.cars)
+        return [car for car in self.cars if car.id in matched_ids][:limit]
 
     def chat_query(self, user_msg: str, chat_history: List[ChatMessage]) -> ChatResponse:
         # Detect simple language indicator or rely on Gemini
