@@ -1,0 +1,7 @@
+{
+  "name": "car-selling-root",
+  "private": true,
+  "scripts": {
+    "build": "npm install --prefix frontend && npm run --prefix frontend build && mkdir -p build && cp -r frontend/dist/* build/"
+  }
+}
