@@ -1,6 +1,6 @@
 import type { ChatMessage } from '../types';
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'https://dream-cars-backend.onrender.com/api';
+const API_BASE_URL = import.meta.env.VITE_API_URL || '/api';
 
 export interface ChatResponseData {
   response: string;
